@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📋 To-Do List Tool</title>
+<style>
+  :root { --primary: #2563eb; --danger: #dc2626; --success: #16a34a; --warning: #f59e0b; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+  h1 { text-align: center; margin: 1rem 0; font-size: 1.8rem; }
+  .status-bar { text-align: center; padding: 0.5rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; }
+  .status-green { background: #dcfce7; color: #166534; }
+  .status-yellow { background: #fef9c3; color: #854d0e; }
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .tab-btn { flex: 1; padding: 0.75rem; border: 2px solid var(--border); background: var(--card); border-radius: 8px; cursor: pointer; font-size: 1rem; font-weight: 600; transition: all 0.2s; }
+  .tab-btn.active { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s; margin-bottom: 1rem; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: #eff6ff; }
+  .upload-zone input { display: none; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; }
+  .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: opacity 0.2s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-warning { background: var(--warning); color: #fff; }
+  .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+  th, td { padding: 0.5rem; border: 1px solid var(--border); text-align: left; font-size: 0.85rem; }
+  th { background: #f1f5f9; font-weight: 600; }
+  .review-actions { display: flex; gap: 0.5rem; margin: 1rem 0; }
+  .todo-item { background: var(--card); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; border-left: 4px solid var(--border); display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .todo-item.completed { opacity: 0.5; }
+  .todo-item.completed .todo-title { text-decoration: line-through; }
+  .todo-item.overdue { border-left-color: var(--danger); background: #fef2f2; }
+  .todo-item.due-today { border-left-color: #f97316; }
+  .todo-item.due-tomorrow { border-left-color: var(--warning); }
+  .todo-item.due-soon { border-left-color: var(--primary); }
+  .todo-item.pinned { background: #fffbeb; }
+  .todo-checkbox { width: 20px; height: 20px; cursor: pointer; }
+  .todo-body { flex: 1; }
+  .todo-title { font-weight: 600; font-size: 0.95rem; }
+  .todo-meta { font-size: 0.8rem; color: var(--muted); }
+  .todo-actions { display: flex; gap: 0.25rem; }
+  .todo-actions button { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.75rem; }
+  .day-group { margin-bottom: 1.5rem; }
+  .day-header { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem; padding-bottom: 0.25rem; border-bottom: 2px solid var(--border); }
+  .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  .filters select, .filters input { padding: 0.4rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; }
+  .lookahead { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+  .lookahead input { width: 80px; }
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--card); border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+  .modal h3 { margin-bottom: 1rem; }
+  .modal .form-group { margin-bottom: 0.75rem; }
+  .empty-state { text-align: center; padding: 3rem; color: var(--muted); }
+  .badge { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .badge-reading { background: #dbeafe; color: #1e40af; }
+  .badge-assignment { background: #fef3c7; color: #92400e; }
+  .badge-exam { background: #fee2e2; color: #991b1b; }
+  .badge-other { background: #e2e8f0; color: #475569; }
+  .export-import { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📋 To-Do List Tool</h1>
+  <div id="statusBar" class="status-bar status-yellow">🟡 Checking server...</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('upload')">📁 Upload & Parse</button>
+    <button class="tab-btn" onclick="switchTab('dashboard')">✅ Dashboard</button>
+  </div>
+
+  <!-- UPLOAD TAB -->
+  <div id="tab-upload" class="tab-content active">
+    <div class="form-group">
+      <label>Course Name</label>
+      <input type="text" id="courseName" placeholder="e.g. Marketing Management" />
+    </div>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".pdf,.docx,.txt" multiple />
+      <p>📄 Click or drag PDF here to upload</p>
+      <p style="font-size:0.8rem;color:var(--muted)">Supports PDF files with course outline tables</p>
+    </div>
+    <div id="parseStatus" style="text-align:center;margin:0.5rem 0;color:var(--muted);"></div>
+
+    <div id="reviewSection" style="display:none;">
+      <h3>Review Extracted Items</h3>
+      <table id="reviewTable">
+        <thead>
+          <tr><th>✓</th><th>Type</th><th>Title</th><th>Due Date</th><th>Course</th><th>Del</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="review-actions">
+        <button class="btn btn-success" onclick="confirmItems()">✅ Add Selected to Dashboard</button>
+        <button class="btn btn-danger" onclick="clearReview()">🗑️ Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <div id="tab-dashboard" class="tab-content">
+    <div class="export-import">
+      <button class="btn btn-primary btn-sm" onclick="addItemModal()">➕ Add Item</button>
+      <button class="btn btn-sm" style="background:#6366f1;color:#fff" onclick="exportJSON()">📤 Export JSON</button>
+      <button class="btn btn-sm" style="background:#8b5cf6;color:#fff" onclick="document.getElementById('importFile').click()">📥 Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" />
+    </div>
+    <div class="filters">
+      <select id="filterCourse"><option value="">All Courses</option></select>
+      <select id="filterType">
+        <option value="">All Types</option>
+        <option value="reading">📖 Reading</option>
+        <option value="assignment">📄 Assignment</option>
+        <option value="quiz">❓ Quiz/Exam</option>
+        <option value="other">🔧 Other</option>
+      </select>
+      <select id="filterStatus">
+        <option value="">All</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+      </select>
+    </div>
+    <div class="lookahead">
+      <label>Show next</label>
+      <input type="number" id="lookahead" value="7" min="1" max="30" />
+      <label>days</label>
+    </div>
+    <div id="dashboardContent"></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="modal-overlay" id="itemModal">
+  <div class="modal">
+    <h3 id="modalTitle">Add Item</h3>
+    <div class="form-group"><label>Title</label><input type="text" id="modalItemTitle" /></div>
+    <div class="form-group"><label>Type</label>
+      <select id="modalItemType">
+        <option value="reading">📖 Reading</option>
+        <option value="assignment">📄 Assignment</option>
+        <option value="quiz">❓ Quiz/Exam</option>
+        <option value="other">🔧 Other</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Due Date</label><input type="date" id="modalItemDate" /></div>
+    <div class="form-group"><label>Course</label><input type="text" id="modalItemCourse" /></div>
+    <div class="form-group" id="urgencySliderGroup" style="display:none;">
+      <label>Custom Urgency (1.0–5.0)</label>
+      <input type="range" id="modalUrgency" min="1" max="5" step="0.5" value="3" />
+      <span id="urgencyVal">3.0</span>
+    </div>
+    <div class="form-group"><label>Recurrence</label>
+      <select id="modalRecurrence">
+        <option value="">None</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="biweekly">Bi-weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button class="btn btn-success" onclick="saveItem()">Save</button>
+      <button class="btn" style="background:var(--border)" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== STATE ==========
+let items = JSON.parse(localStorage.getItem('todoItems') || '[]');
+let extractedItems = [];
+let editingId = null;
+let serverAvailable = false;
+
+const WEIGHTS = { quiz: 5.0, assignment: 3.5, reading: 1.5, other: 1.0 };
+const ICONS = { reading: '📖', assignment: '📄', quiz: '❓', other: '🔧' };
+
+// ========== SERVER CHECK ==========
+async function checkServer() {
+  try {
+    const r = await fetch('/health', { method: 'GET', signal: AbortSignal.timeout(2000) });
+    if (r.ok) { serverAvailable = true; setStatus('🟢 Server connected — accurate pdfplumber parsing', 'status-green'); }
+    else throw 0;
+  } catch(e) {
+    serverAvailable = false;
+    setStatus('🟡 Standalone mode — upload PDFs for browser-based parsing, or run python app.py for better accuracy', 'status-yellow');
+  }
+}
+function setStatus(msg, cls) {
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar ' + cls;
+}
+checkServer();
+
+// ========== TABS ==========
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i === (name==='upload'?0:1)));
+  document.querySelectorAll('.tab-content').forEach((c,i) => c.classList.toggle('active', i === (name==='upload'?0:1)));
+  if (name === 'dashboard') renderDashboard();
+}
+
+// ========== FILE UPLOAD ==========
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(files) {
+  const course = document.getElementById('courseName').value.trim() || 'Untitled Course';
+  for (const file of files) {
+    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+      if (serverAvailable) {
+        await parsePDFServer(file, course);
+      } else {
+        await parsePDFBrowser(file, course);
+      }
+    }
+  }
+}
+
+async function parsePDFServer(file, course) {
+  const status = document.getElementById('parseStatus');
+  status.textContent = '⏳ Parsing via pdfplumber...';
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('course', course);
+    const r = await fetch('/parse', { method: 'POST', body: formData });
+    const data = await r.json();
+    if (data.items && data.items.length > 0) {
+      extractedItems = data.items.map(it => ({
+        ...it,
+        selected: true,
+        dueDate: it.dueDate ? it.dueDate.substring(0, 10) : ''
+      }));
+      status.textContent = `✅ Extracted ${extractedItems.length} items via pdfplumber`;
+      renderReviewTable();
+    } else {
+      status.textContent = '⚠️ Server found no items — falling back to browser parsing';
+      await parsePDFBrowser(file, course);
+    }
+  } catch(e) {
+    status.textContent = '⚠️ Server error: ' + e.message + ' — using browser-based parsing';
+    await parsePDFBrowser(file, course);
+  }
+}
+
+async function parsePDFBrowser(file, course) {
+  const status = document.getElementById('parseStatus');
+  status.textContent = '⏳ Parsing in browser (less accurate)...';
+  try {
+    if (typeof pdfjsLib === 'undefined') {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      document.head.appendChild(s);
+      await new Promise((res,rej) => { s.onload = res; s.onerror = rej; });
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(buf).promise;
+    let allText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      allText += tc.items.map(x => x.str).join(' ') + '\n';
+    }
+    extractedItems = extractFromText(allText, course);
+    status.textContent = extractedItems.length > 0
+      ? `✅ Extracted ${extractedItems.length} items (browser mode)`
+      : '⚠️ No items found — try adding manually';
+    if (extractedItems.length > 0) renderReviewTable();
+  } catch(e) {
+    status.textContent = '❌ PDF parsing failed: ' + e.message;
+  }
+}
+
+function extractFromText(text, course) {
+  const lines = text.split('\n');
+  const items = [];
+  const dateRe = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/;
+  let floatingDate = null;
+  const actionRe = /(?:READ|SUBMIT|COMPLETE|PREPARE|EXPLORE|WATCH|ANALYZE)\s*:?\s*/i;
+
+  for (const line of lines) {
+    const dm = line.match(dateRe);
+    if (dm) {
+      let yr = dm[3] ? parseInt(dm[3]) : 2026;
+      if (yr < 100) yr += 2000;
+      try { floatingDate = new Date(yr, parseInt(dm[1])-1, parseInt(dm[2])); } catch(e) {}
+    }
+    if (floatingDate && actionRe.test(line)) {
+      const title = line.replace(/^[•\-\s]+/, '').replace(actionRe, '').trim();
+      if (title.length > 3) {
+        let type = 'reading';
+        if (/submit|assignment|due|case\s*memo/i.test(line)) type = 'assignment';
+        if (/exam|quiz|midterm|final|assessment/i.test(line)) type = 'quiz';
+        items.push({ id: crypto.randomUUID(), course, type, title, dueDate: floatingDate.toISOString().substring(0,10), selected: true });
+      }
+    }
+  }
+  return items;
+}
+
+// ========== REVIEW TABLE ==========
+function renderReviewTable() {
+  const tbody = document.querySelector('#reviewTable tbody');
+  tbody.innerHTML = '';
+  extractedItems.forEach((item, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" ${item.selected?'checked':''} onchange="extractedItems[${i}].selected=this.checked" /></td>
+      <td><select onchange="extractedItems[${i}].type=this.value">
+        <option value="reading" ${item.type==='reading'?'selected':''}>📖 Reading</option>
+        <option value="assignment" ${item.type==='assignment'?'selected':''}>📄 Assignment</option>
+        <option value="quiz" ${item.type==='quiz'?'selected':''}>❓ Quiz/Exam</option>
+        <option value="other" ${item.type==='other'?'selected':''}>🔧 Other</option>
+      </select></td>
+      <td><input type="text" value="${item.title.replace(/"/g,'&quot;')}" onchange="extractedItems[${i}].title=this.value" style="width:100%;min-width:200px" /></td>
+      <td><input type="date" value="${item.dueDate||''}" onchange="extractedItems[${i}].dueDate=this.value" /></td>
+      <td>${item.course}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="extractedItems.splice(${i},1);renderReviewTable()">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('reviewSection').style.display = 'block';
+}
+
+function confirmItems() {
+  const selected = extractedItems.filter(it => it.selected);
+  selected.forEach(it => {
+    items.push({
+      id: it.id || crypto.randomUUID(),
+      course: it.course,
+      type: it.type,
+      title: it.title,
+      dueDate: it.dueDate + 'T23:59:00',
+      completed: false,
+      pinned: false,
+      manualUrgencyBoost: 0,
+      customUrgencyScore: null,
+      recurrence: null,
+      urgency: 0
+    });
+  });
+  saveItems();
+  extractedItems = [];
+  document.getElementById('reviewSection').style.display = 'none';
+  document.getElementById('parseStatus').textContent = `✅ Added ${selected.length} items to dashboard`;
+  switchTab('dashboard');
+}
+
+function clearReview() {
+  extractedItems = [];
+  document.getElementById('reviewSection').style.display = 'none';
+}
+
+// ========== DASHBOARD ==========
+function renderDashboard() {
+  updateCourseFilter();
+  const container = document.getElementById('dashboardContent');
+  const lookahead = parseInt(document.getElementById('lookahead').value) || 7;
+  const filterCourse = document.getElementById('filterCourse').value;
+  const filterType = document.getElementById('filterType').value;
+  const filterStatus = document.getElementById('filterStatus').value;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const maxDate = new Date(today.getTime() + lookahead * 86400000);
+
+  let filtered = items.filter(it => {
+    if (filterCourse && it.course !== filterCourse) return false;
+    if (filterType && it.type !== filterType) return false;
+    if (filterStatus === 'active' && it.completed) return false;
+    if (filterStatus === 'completed' && !it.completed) return false;
+    return true;
+  });
+
+  // Compute urgency
+  filtered.forEach(it => {
+    const due = new Date(it.dueDate);
+    const hours = Math.max((due - now) / 3600000, 1);
+    const weight = (it.customUrgencyScore || WEIGHTS[it.type] || 1) + (it.manualUrgencyBoost || 0);
+    it.urgency = weight * (1 / hours);
+  });
+
+  // Group: overdue, today, upcoming
+  const overdue = filtered.filter(it => !it.completed && new Date(it.dueDate) < today).sort((a,b) => b.urgency - a.urgency);
+  const dueToday = filtered.filter(it => { const d = new Date(it.dueDate); return d >= today && d < new Date(today.getTime()+86400000); }).sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || b.urgency-a.urgency);
+
+  const upcoming = {};
+  for (let d = 1; d <= lookahead; d++) {
+    const dayStart = new Date(today.getTime() + d * 86400000);
+    const dayEnd = new Date(dayStart.getTime() + 86400000);
+    const dayItems = filtered.filter(it => { const dd = new Date(it.dueDate); return dd >= dayStart && dd < dayEnd; })
+      .sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || b.urgency-a.urgency);
+    if (dayItems.length > 0) upcoming[dayStart.toDateString()] = dayItems;
+  }
+
+  let html = '';
+  if (overdue.length > 0) {
+    html += `<div class="day-group"><div class="day-header">🔴 Overdue</div>`;
+    overdue.forEach(it => html += renderItem(it, 'overdue'));
+    html += '</div>';
+  }
+
+  html += `<div class="day-group"><div class="day-header">🟠 Today — ${today.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>`;
+  if (dueToday.length > 0) dueToday.forEach(it => html += renderItem(it, 'due-today'));
+  else html += '<div class="empty-state">Nothing due today 🎉</div>';
+  html += '</div>';
+
+  for (const [dayStr, dayItems] of Object.entries(upcoming)) {
+    const d = new Date(dayStr);
+    const diff = Math.round((d - today) / 86400000);
+    const cls = diff === 1 ? 'due-tomorrow' : diff <= 4 ? 'due-soon' : '';
+    html += `<div class="day-group"><div class="day-header">${diff===1?'🟡':diff<=4?'🔵':'⚪'} ${d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</div>`;
+    dayItems.forEach(it => html += renderItem(it, cls));
+    html += '</div>';
+  }
+
+  if (!overdue.length && !dueToday.length && !Object.keys(upcoming).length) {
+    html = '<div class="empty-state">No items to show. Upload a PDF or add items manually.</div>';
+  }
+  container.innerHTML = html;
+}
+
+function renderItem(item, cls) {
+  const icon = ICONS[item.type] || '🔧';
+  const badge = `badge-${item.type==='quiz'?'exam':item.type}`;
+  const boost = item.manualUrgencyBoost > 0 ? ' ' + '🔥'.repeat(Math.min(item.manualUrgencyBoost, 3)) : '';
+  const pin = item.pinned ? '📌 ' : '';
+  return `
+    <div class="todo-item ${cls} ${item.completed?'completed':''} ${item.pinned?'pinned':''}">
+      <input type="checkbox" class="todo-checkbox" ${item.completed?'checked':''} onchange="toggleComplete('${item.id}')" />
+      <div class="todo-body">
+        <div class="todo-title">${pin}${icon} ${item.title}${boost}</div>
+        <div class="todo-meta"><span class="badge ${badge}">${item.type}</span> · ${item.course} · Due: ${new Date(item.dueDate).toLocaleDateString()}</div>
+      </div>
+      <div class="todo-actions">
+        <button onclick="togglePin('${item.id}')" title="Pin">📌</button>
+        <button onclick="boostItem('${item.id}',1)" title="Boost">⬆</button>
+        <button onclick="boostItem('${item.id}',-1)" title="Reduce">⬇</button>
+        <button onclick="editItem('${item.id}')" title="Edit">✏️</button>
+        <button onclick="deleteItem('${item.id}')" title="Delete">🗑️</button>
+      </div>
+    </div>`;
+}
+
+// ========== ITEM ACTIONS ==========
+function toggleComplete(id) { const it = items.find(i=>i.id===id); if(it){ it.completed=!it.completed; saveItems(); renderDashboard(); } }
+function togglePin(id) { const it = items.find(i=>i.id===id); if(it){ it.pinned=!it.pinned; saveItems(); renderDashboard(); } }
+function boostItem(id, delta) { const it = items.find(i=>i.id===id); if(it){ it.manualUrgencyBoost = Math.max(0, Math.min(3, (it.manualUrgencyBoost||0)+delta)); saveItems(); renderDashboard(); } }
+function deleteItem(id) { if(confirm('Delete this item?')){ items = items.filter(i=>i.id!==id); saveItems(); renderDashboard(); } }
+
+// ========== MODAL ==========
+function addItemModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add Item';
+  document.getElementById('modalItemTitle').value = '';
+  document.getElementById('modalItemType').value = 'reading';
+  document.getElementById('modalItemDate').value = new Date().toISOString().substring(0,10);
+  document.getElementById('modalItemCourse').value = document.getElementById('courseName').value || '';
+  document.getElementById('modalRecurrence').value = '';
+  document.getElementById('urgencySliderGroup').style.display = 'none';
+  document.getElementById('itemModal').classList.add('active');
+}
+
+function editItem(id) {
+  const it = items.find(i=>i.id===id);
+  if (!it) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Item';
+  document.getElementById('modalItemTitle').value = it.title;
+  document.getElementById('modalItemType').value = it.type;
+  document.getElementById('modalItemDate').value = it.dueDate.substring(0,10);
+  document.getElementById('modalItemCourse').value = it.course;
+  document.getElementById('modalRecurrence').value = it.recurrence || '';
+  const isOther = it.type === 'other';
+  document.getElementById('urgencySliderGroup').style.display = isOther ? 'block' : 'none';
+  if (isOther && it.customUrgencyScore) {
+    document.getElementById('modalUrgency').value = it.customUrgencyScore;
+    document.getElementById('urgencyVal').textContent = it.customUrgencyScore.toFixed(1);
+  }
+  document.getElementById('itemModal').classList.add('active');
+}
+
+function closeModal() { document.getElementById('itemModal').classList.remove('active'); }
+
+document.getElementById('modalItemType').addEventListener('change', function() {
+  document.getElementById('urgencySliderGroup').style.display = this.value === 'other' ? 'block' : 'none';
+});
+document.getElementById('modalUrgency').addEventListener('input', function() {
+  document.getElementById('urgencyVal').textContent = parseFloat(this.value).toFixed(1);
+});
+
+function saveItem() {
+  const title = document.getElementById('modalItemTitle').value.trim();
+  const type = document.getElementById('modalItemType').value;
+  const date = document.getElementById('modalItemDate').value;
+  const course = document.getElementById('modalItemCourse').value.trim() || 'General';
+  const recurrence = document.getElementById('modalRecurrence').value || null;
+  const customUrgency = type === 'other' ? parseFloat(document.getElementById('modalUrgency').value) : null;
+
+  if (!title || !date) { alert('Title and date are required'); return; }
+
+  if (editingId) {
+    const it = items.find(i=>i.id===editingId);
+    if (it) { Object.assign(it, { title, type, dueDate: date+'T23:59:00', course, recurrence, customUrgencyScore: customUrgency }); }
+  } else {
+    const newItem = { id: crypto.randomUUID(), course, type, title, dueDate: date+'T23:59:00', completed: false, pinned: false, manualUrgencyBoost: 0, customUrgencyScore: customUrgency, recurrence, urgency: 0 };
+    items.push(newItem);
+    if (recurrence) generateRecurrences(newItem);
+  }
+  saveItems();
+  closeModal();
+  renderDashboard();
+}
+
+function generateRecurrences(item) {
+  const intervals = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 };
+  const days = intervals[item.recurrence] || 7;
+  const base = new Date(item.dueDate);
+  for (let n = 1; n <= 12; n++) {
+    const d = new Date(base.getTime() + n * days * 86400000);
+    items.push({ ...item, id: crypto.randomUUID(), title: item.title.replace(/\{n\}/g, n+1), dueDate: d.toISOString().substring(0,10)+'T23:59:00' });
+  }
+}
+
+// ========== PERSISTENCE ==========
+function saveItems() { localStorage.setItem('todoItems', JSON.stringify(items)); }
+function updateCourseFilter() {
+  const sel = document.getElementById('filterCourse');
+  const courses = [...new Set(items.map(i=>i.course))];
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All Courses</option>' + courses.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+}
+
+// ========== EXPORT / IMPORT ==========
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'todo_backup.json'; a.click();
+}
+document.getElementById('importFile').addEventListener('change', function(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function() {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (Array.isArray(imported)) { items = items.concat(imported); saveItems(); renderDashboard(); alert(`Imported ${imported.length} items`); }
+    } catch(e) { alert('Invalid JSON file'); }
+  };
+  reader.readAsText(file);
+});
+
+// ========== FILTER LISTENERS ==========
+document.getElementById('filterCourse').addEventListener('change', renderDashboard);
+document.getElementById('filterType').addEventListener('change', renderDashboard);
+document.getElementById('filterStatus').addEventListener('change', renderDashboard);
+document.getElementById('lookahead').addEventListener('change', renderDashboard);
+</script>
+</body>
+</html>
