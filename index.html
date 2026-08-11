@@ -233,11 +233,12 @@ async function handleFiles(files) {
         const resp = await fetch('/parse', { method: 'POST', body: formData });
         const data = await resp.json();
         if (data.items && data.items.length > 0) {
-          extractedItems = data.items.map(it => ({
-            ...it,
-            course: it.course || courseName,
-            selected: true
-          }));
+		  const cName = document.getElementById('courseName').value.trim();
+		  extractedItems = data.items.map(it => ({
+		    ...it,
+		    course: cName,
+		    selected: true
+		  }));
           renderReviewTable();
           document.getElementById('reviewSection').style.display = 'block';
           document.getElementById('parseStatus').textContent = `✅ Found ${data.items.length} items via pdfplumber`;
