@@ -124,48 +124,45 @@
       <button class="btn btn-danger btn-sm" onclick="clearAllItems()">🗑️ Clear All</button>
     </div>
     <div class="filters">
-      <label style="font-weight:600;font-size:0.85rem;">Filter:</label>
-      <select id="filterCourse" onchange="renderDashboard()"><option value="">All Courses</option></select>
-      <select id="filterType" onchange="renderDashboard()">
+      <select id="filterCourse"><option value="">All Courses</option></select>
+      <select id="filterType">
         <option value="">All Types</option>
         <option value="reading">📖 Reading</option>
         <option value="assignment">📄 Assignment</option>
-        <option value="exam">❓ Exam</option>
+        <option value="exam">❓ Quiz/Exam</option>
         <option value="other">🔧 Other</option>
       </select>
     </div>
     <div class="lookahead">
-      <label style="font-weight:600;font-size:0.85rem;">Lookahead:</label>
-      <input type="number" id="lookaheadDays" value="7" min="1" max="30" onchange="renderDashboard()" />
-      <span style="font-size:0.85rem;">days</span>
+      <label>📅 Lookahead:</label>
+      <input type="number" id="lookahead" value="7" min="1" max="30" />
+      <span>days</span>
     </div>
     <div id="dashboardContent"></div>
   </div>
 </div>
 
-<!-- EDIT MODAL -->
-<div class="modal-overlay" id="editModal">
+<!-- ADD/EDIT MODAL -->
+<div class="modal-overlay" id="modalOverlay">
   <div class="modal">
-    <h3 id="modalTitle">Edit Item</h3>
-    <div class="form-group"><label>Title</label><input type="text" id="editTitle" /></div>
+    <h3 id="modalTitle">Add Item</h3>
+    <div class="form-group"><label>Title</label><input type="text" id="modalItemTitle" /></div>
+    <div class="form-group"><label>Course</label><input type="text" id="modalItemCourse" /></div>
     <div class="form-group"><label>Type</label>
-      <select id="editType">
+      <select id="modalItemType">
         <option value="reading">📖 Reading</option>
-        <option value="assignment">📄 Assignment</option>
-        <option value="exam">❓ Exam</option>
+        <option value="assignment">📄 Assignment/Project</option>
+        <option value="exam">❓ Quiz/Exam</option>
         <option value="other">🔧 Other</option>
       </select>
     </div>
-    <div class="form-group"><label>Due Date</label><input type="date" id="editDueDate" /></div>
-    <div class="form-group"><label>Course</label><input type="text" id="editCourse" /></div>
-    <div class="form-group" id="urgencyGroup" style="display:none;">
-      <label>Custom Urgency (1.0–5.0)</label>
-      <input type="range" id="editUrgency" min="1" max="5" step="0.5" value="3" oninput="document.getElementById('urgencyVal').textContent=this.value" />
-      <span id="urgencyVal">3</span>
+    <div class="form-group"><label>Due Date</label><input type="date" id="modalItemDate" /></div>
+    <div class="form-group" id="urgencySliderGroup" style="display:none;">
+      <label>Custom Urgency: <span id="urgencyVal">3.0</span></label>
+      <input type="range" id="modalUrgency" min="1" max="5" step="0.5" value="3" oninput="document.getElementById('urgencyVal').textContent=this.value" />
     </div>
-    <div class="form-group" id="recurrenceGroup">
-      <label>Recurrence</label>
-      <select id="editRecurrence">
+    <div class="form-group"><label>Recurrence</label>
+      <select id="modalRecurrence">
         <option value="">None</option>
         <option value="daily">Daily</option>
         <option value="weekly">Weekly</option>
@@ -173,48 +170,45 @@
         <option value="monthly">Monthly</option>
       </select>
     </div>
-    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-      <button class="btn btn-primary" onclick="saveEdit()">Save</button>
-      <button class="btn" style="background:var(--border)" onclick="closeModal()">Cancel</button>
+    <div class="form-group" id="recurrenceEndGroup" style="display:none;">
+      <label>Recurrence End Date</label><input type="date" id="modalRecurrenceEnd" />
+    </div>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modalSaveBtn" onclick="saveModalItem()">Save</button>
     </div>
   </div>
 </div>
 
 <script>
-// ===== STATE =====
+// ==================== STATE ====================
 let todoItems = JSON.parse(localStorage.getItem('todoItems') || '[]');
 let extractedItems = [];
 let editingId = null;
 let serverAvailable = false;
 let completedOpen = false;
 
-// ===== SERVER CHECK =====
+// ==================== SERVER CHECK ====================
 async function checkServer() {
   try {
     const r = await fetch('/health', { method: 'GET', signal: AbortSignal.timeout(2000) });
     if (r.ok) { serverAvailable = true; setStatus('green', '🟢 Server connected — accurate PDF parsing via pdfplumber'); }
-    else { fallbackMode(); }
-  } catch(e) { fallbackMode(); }
+    else { setFallback(); }
+  } catch(e) { setFallback(); }
 }
-function fallbackMode() {
-  serverAvailable = false;
-  setStatus('yellow', '🟡 Standalone mode — run "python app.py" for accurate PDF parsing');
-}
-function setStatus(color, msg) {
-  const bar = document.getElementById('statusBar');
-  bar.className = 'status-bar status-' + color;
-  bar.textContent = msg;
-}
+function setFallback() { serverAvailable = false; setStatus('yellow', '🟡 Standalone mode — browser-based parsing (run python app.py for better results)'); }
+function setStatus(color, msg) { const b = document.getElementById('statusBar'); b.className = 'status-bar status-' + color; b.textContent = msg; }
 checkServer();
 
-// ===== TABS =====
+// ==================== TABS ====================
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (tab==='upload'?0:1)===i));
-  document.querySelectorAll('.tab-content').forEach((c,i) => c.classList.toggle('active', (tab==='upload'?0:1)===i));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
   if (tab === 'dashboard') renderDashboard();
 }
 
-// ===== FILE UPLOAD =====
+// ==================== FILE UPLOAD ====================
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
@@ -223,359 +217,280 @@ uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classL
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
 async function handleFiles(files) {
-  const courseName = document.getElementById('courseName').value.trim() || 'Unknown Course';
+  const courseName = document.getElementById('courseName').value.trim();
   for (const file of files) {
-    const status = document.getElementById('parseStatus');
-    if (serverAvailable && file.name.toLowerCase().endsWith('.pdf')) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      document.getElementById('parseStatus').textContent = '⚠️ Only PDF files are supported.';
+      continue;
+    }
+    if (serverAvailable) {
+      document.getElementById('parseStatus').textContent = '⏳ Parsing via pdfplumber...';
       try {
-        status.textContent = '⏳ Parsing via pdfplumber...';
         const formData = new FormData();
         formData.append('file', file);
         formData.append('course', courseName);
+        formData.append('year', new Date().getFullYear().toString());
         const resp = await fetch('/parse', { method: 'POST', body: formData });
         const data = await resp.json();
         if (data.items && data.items.length > 0) {
           extractedItems = data.items.map(it => ({
-            id: crypto.randomUUID(),
+            ...it,
             course: it.course || courseName,
-            type: it.type || 'reading',
-            title: it.title || '',
-            dueDate: (it.dueDate || '').substring(0, 10),
-            completed: false,
-            pinned: false,
-            manualUrgencyBoost: 0,
-            customUrgencyScore: null,
-            recurrence: '',
             selected: true
           }));
           renderReviewTable();
           document.getElementById('reviewSection').style.display = 'block';
-          status.textContent = `✅ Extracted ${extractedItems.length} items via pdfplumber`;
-          return;
+          document.getElementById('parseStatus').textContent = `✅ Found ${data.items.length} items via pdfplumber`;
         } else {
-          status.textContent = '⚠️ Server found no items — falling back to browser parsing';
+          document.getElementById('parseStatus').textContent = '⚠️ Server found no items — try browser-based parsing or add items manually';
         }
-      } catch(err) {
-        status.textContent = '⚠️ Server error: ' + err.message + ' — using browser-based parsing';
+      } catch(e) {
+        document.getElementById('parseStatus').textContent = '⚠️ Server error: ' + e.message;
       }
-    }
-    // Fallback: browser-based parsing
-    status.textContent = '⏳ Parsing in browser...';
-    try {
-      const text = await extractText(file);
-      extractedItems = parseText(text, courseName);
-      if (extractedItems.length > 0) {
+    } else {
+      document.getElementById('parseStatus').textContent = '⏳ Parsing in browser (less accurate)...';
+      try {
+        const text = await extractPDFText(file);
+        const items = parseText(text, courseName);
+        extractedItems = items.map(it => ({ ...it, selected: true }));
         renderReviewTable();
         document.getElementById('reviewSection').style.display = 'block';
-        status.textContent = `✅ Extracted ${extractedItems.length} items (browser parsing)`;
-      } else {
-        status.textContent = '⚠️ No items found. Try adding manually on Dashboard.';
+        document.getElementById('parseStatus').textContent = `✅ Found ${items.length} items (browser mode)`;
+      } catch(e) {
+        document.getElementById('parseStatus').textContent = '⚠️ Parse error: ' + e.message;
       }
-    } catch(err) {
-      status.textContent = '❌ Error: ' + err.message;
     }
   }
 }
 
-async function extractText(file) {
-  if (file.name.toLowerCase().endsWith('.txt')) return await file.text();
-  if (file.name.toLowerCase().endsWith('.pdf')) {
-    const pdfjsLib = await loadPdfJs();
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(it => it.str).join(' ') + '\n';
-    }
-    return text;
+// ==================== PDF TEXT EXTRACTION (BROWSER FALLBACK) ====================
+async function extractPDFText(file) {
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  document.head.appendChild(script);
+  await new Promise(r => script.onload = r);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
   }
-  return await file.text();
+  return text;
 }
 
-let pdfjsLoaded = null;
-function loadPdfJs() {
-  if (pdfjsLoaded) return pdfjsLoaded;
-  pdfjsLoaded = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(pdfjsLib); };
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-  return pdfjsLoaded;
-}
-
-// ===== BROWSER-BASED PARSER (FALLBACK) =====
+// ==================== BROWSER-BASED PARSER (FALLBACK) ====================
 function parseText(text, courseName) {
   const items = [];
   const dateRe = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g;
   const lines = text.split('\n');
   let currentDate = null;
   const year = new Date().getFullYear();
-
-  // Find outline section
-  let outlineStart = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].toLowerCase();
-    if (l.includes('course outline') || l.includes('immersion outline') || l.includes('course schedule')) {
-      outlineStart = i; break;
-    }
-  }
-
-  for (let i = outlineStart; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Stop at policy sections
-    const ll = line.toLowerCase();
-    if (ll.includes('evaluation and grading') || ll.includes('course policies') || ll.includes('anderson and course policies')) break;
-
-    // Try to find dates
+  for (const line of lines) {
     const dateMatch = line.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
     if (dateMatch) {
       let m = parseInt(dateMatch[1]), d = parseInt(dateMatch[2]);
       let y = dateMatch[3] ? parseInt(dateMatch[3]) : year;
       if (y < 100) y += 2000;
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        currentDate = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      }
+      currentDate = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     }
-
     if (!currentDate) continue;
-
-    // Look for action keywords
-    const readMatch = line.match(/(?:^|\•\s*)(?:READ:?\s*)(.+)/i);
-    const submitMatch = line.match(/(?:^|\•\s*)(?:SUBMIT:?\s*)(.+)/i);
-    const examMatch = line.match(/\b(final\s*exam|midterm|quiz|assessment)\b/i);
-
+    const readMatch = line.match(/READ[:\s]+(.+)/i);
     if (readMatch) {
-      items.push(makeItem(readMatch[1].trim(), 'reading', currentDate, courseName));
-    } else if (submitMatch) {
-      items.push(makeItem(submitMatch[1].trim(), 'assignment', currentDate, courseName));
-    } else if (examMatch) {
-      items.push(makeItem(line.trim(), 'exam', currentDate, courseName));
+      items.push({ id: crypto.randomUUID(), course: courseName, type: 'reading', title: readMatch[1].trim().substring(0,200), description: '', dueDate: currentDate+'T23:59:00', completed: false, isUserAdded: false, pinned: false, manualUrgencyBoost: 0, customUrgencyScore: null, recurrence: null, urgency: 0 });
+    }
+    const submitMatch = line.match(/SUBMIT[:\s]+(.+)/i);
+    if (submitMatch) {
+      items.push({ id: crypto.randomUUID(), course: courseName, type: 'assignment', title: submitMatch[1].trim().substring(0,200), description: '', dueDate: currentDate+'T23:59:00', completed: false, isUserAdded: false, pinned: false, manualUrgencyBoost: 0, customUrgencyScore: null, recurrence: null, urgency: 0 });
+    }
+    if (/\b(final\s*exam|midterm|quiz|assessment)\b/i.test(line)) {
+      items.push({ id: crypto.randomUUID(), course: courseName, type: 'exam', title: line.trim().substring(0,200), description: '', dueDate: currentDate+'T23:59:00', completed: false, isUserAdded: false, pinned: false, manualUrgencyBoost: 0, customUrgencyScore: null, recurrence: null, urgency: 0 });
     }
   }
   return items;
 }
 
-function makeItem(title, type, dueDate, course) {
-  return {
-    id: crypto.randomUUID(),
-    course: course,
-    type: type,
-    title: cleanTitle(title),
-    dueDate: dueDate,
-    completed: false,
-    pinned: false,
-    manualUrgencyBoost: 0,
-    customUrgencyScore: null,
-    recurrence: '',
-    selected: true
-  };
-}
-
-function cleanTitle(t) {
-  return t.replace(/^[\•\-\*]\s*/, '')
-    .replace(/^(READ|SUBMIT|PREPARE|EXPLORE|COMPLETE|WATCH|ANALYZE):?\s*/i, '')
-    .replace(/\s+/g, ' ').trim();
-}
-
-// ===== REVIEW TABLE =====
+// ==================== REVIEW TABLE ====================
 function renderReviewTable() {
   const tbody = document.querySelector('#reviewTable tbody');
   tbody.innerHTML = '';
-  extractedItems.forEach((item, idx) => {
+  extractedItems.forEach((item, i) => {
     const tr = document.createElement('tr');
+    tr.setAttribute('data-index', i);
+    tr.setAttribute('data-course', item.course || '');
+    const dateVal = (item.dueDate || '').substring(0, 10);
     tr.innerHTML = `
-      <td><input type="checkbox" ${item.selected?'checked':''} onchange="extractedItems[${idx}].selected=this.checked" /></td>
-      <td><select onchange="extractedItems[${idx}].type=this.value">
+      <td><input type="checkbox" ${item.selected ? 'checked' : ''} /></td>
+      <td><select>
         <option value="reading" ${item.type==='reading'?'selected':''}>📖 Reading</option>
         <option value="assignment" ${item.type==='assignment'?'selected':''}>📄 Assignment</option>
-        <option value="exam" ${item.type==='exam'?'selected':''}>❓ Exam</option>
+        <option value="exam" ${item.type==='exam'?'selected':''}>❓ Quiz/Exam</option>
         <option value="other" ${item.type==='other'?'selected':''}>🔧 Other</option>
       </select></td>
-      <td><input type="text" value="${item.title.replace(/"/g,'&quot;')}" onchange="extractedItems[${idx}].title=this.value" style="width:100%;font-size:0.8rem;" /></td>
-      <td><input type="date" value="${item.dueDate}" onchange="extractedItems[${idx}].dueDate=this.value" /></td>
-      <td><input type="text" value="${item.course.replace(/"/g,'&quot;')}" onchange="extractedItems[${idx}].course=this.value" style="width:100%;font-size:0.8rem;" /></td>
-      <td><button class="btn btn-danger btn-sm" onclick="extractedItems.splice(${idx},1);renderReviewTable();">✕</button></td>
+      <td><input type="text" value="${(item.title||'').replace(/"/g,'&quot;')}" style="width:100%;" /></td>
+      <td><input type="date" value="${dateVal}" /></td>
+      <td>${item.course || ''}</td>
+      <td><button onclick="deleteReviewItem(${i})" style="cursor:pointer;">🗑️</button></td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function confirmItems() {
-  const selected = extractedItems.filter(it => it.selected);
-  if (selected.length === 0) { alert('No items selected.'); return; }
-  selected.forEach(it => {
-    const item = {
-      id: it.id,
-      course: it.course,
-      type: it.type,
-      title: it.title,
-      dueDate: it.dueDate + 'T23:59:00',
-      completed: false,
-      pinned: false,
-      manualUrgencyBoost: 0,
-      customUrgencyScore: it.customUrgencyScore,
-      recurrence: it.recurrence || '',
-      urgency: 0
-    };
-    // Generate recurring items
-    if (item.recurrence) {
-      generateRecurring(item);
-    } else {
-      todoItems.push(item);
-    }
-  });
-  saveItems();
-  clearReview();
-  switchTab('dashboard');
+function deleteReviewItem(i) {
+  extractedItems.splice(i, 1);
+  renderReviewTable();
 }
 
 function clearReview() {
   extractedItems = [];
   document.querySelector('#reviewTable tbody').innerHTML = '';
   document.getElementById('reviewSection').style.display = 'none';
-  document.getElementById('parseStatus').textContent = '';
 }
 
-function generateRecurring(item) {
-  const patterns = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 };
-  const interval = patterns[item.recurrence] || 7;
-  const start = new Date(item.dueDate);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 90); // 3 months
-  let current = new Date(start);
-  let n = 1;
-  while (current <= end) {
-    const copy = { ...item, id: crypto.randomUUID(), title: item.title.replace('{n}', n), dueDate: current.toISOString().substring(0,10) + 'T23:59:00' };
-    todoItems.push(copy);
-    current.setDate(current.getDate() + interval);
-    n++;
-  }
+function confirmItems() {
+  const rows = document.querySelectorAll('#reviewTable tbody tr');
+  let added = 0;
+  rows.forEach((row, i) => {
+    const cells = row.cells;
+    const selected = cells[0].querySelector('input').checked;
+    if (!selected) return;
+    const type = cells[1].querySelector('select').value;
+    const title = cells[2].querySelector('input').value.trim();
+    const date = cells[3].querySelector('input').value;
+    const course = row.getAttribute('data-course') || '';
+    if (!title || !date) return;
+    todoItems.push({
+      id: crypto.randomUUID(),
+      course: course,
+      type: type,
+      title: title,
+      description: '',
+      dueDate: date + 'T23:59:00',
+      completed: false,
+      isUserAdded: false,
+      pinned: false,
+      manualUrgencyBoost: 0,
+      customUrgencyScore: null,
+      recurrence: null,
+      urgency: 0
+    });
+    added++;
+  });
+  saveItems();
+  clearReview();
+  switchTab('dashboard');
+  alert(`✅ Added ${added} items to dashboard`);
 }
 
-// ===== DASHBOARD =====
+// ==================== STORAGE ====================
+function saveItems() { localStorage.setItem('todoItems', JSON.stringify(todoItems)); }
+function loadItems() { todoItems = JSON.parse(localStorage.getItem('todoItems') || '[]'); }
+
+// ==================== URGENCY ====================
+function calcUrgency(item) {
+  const weights = { exam: 5.0, assignment: 3.5, reading: 1.5, other: 1.0 };
+  const base = item.customUrgencyScore || weights[item.type] || 1.0;
+  const eff = base + (item.manualUrgencyBoost || 0);
+  const now = new Date();
+  const due = new Date(item.dueDate);
+  const hrs = Math.max((due - now) / 3600000, 1);
+  return eff * (1 / hrs);
+}
+
+// ==================== DASHBOARD ====================
 function renderDashboard() {
+  loadItems();
   const container = document.getElementById('dashboardContent');
   const filterCourse = document.getElementById('filterCourse').value;
   const filterType = document.getElementById('filterType').value;
-  const lookahead = parseInt(document.getElementById('lookaheadDays').value) || 7;
-
+  const lookahead = parseInt(document.getElementById('lookahead').value) || 7;
   // Update course filter options
-  const courses = [...new Set(todoItems.map(it => it.course))];
+  const courses = [...new Set(todoItems.map(i => i.course).filter(Boolean))];
   const courseSelect = document.getElementById('filterCourse');
   const currentVal = courseSelect.value;
   courseSelect.innerHTML = '<option value="">All Courses</option>';
   courses.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; courseSelect.appendChild(o); });
   courseSelect.value = currentVal;
 
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + lookahead);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const endDate = new Date(now); endDate.setDate(endDate.getDate() + lookahead);
 
-  // Filter items
-  let items = todoItems.filter(it => {
-    if (filterCourse && it.course !== filterCourse) return false;
-    if (filterType && it.type !== filterType) return false;
-    return true;
-  });
+  // Separate active and completed items
+  let active = todoItems.filter(i => !i.completed);
+  let completed = todoItems.filter(i => i.completed);
 
-  // Separate active and completed
-  const activeItems = items.filter(it => !it.completed);
-  const completedItems = items.filter(it => it.completed);
+  // Apply filters to active items
+  if (filterCourse) active = active.filter(i => i.course === filterCourse);
+  if (filterType) active = active.filter(i => i.type === filterType);
 
-  // Calculate urgency for active items
-  activeItems.forEach(it => {
-    const due = new Date(it.dueDate);
-    const hoursUntil = (due - now) / (1000 * 60 * 60);
-    const weights = { exam: 5, assignment: 3.5, reading: 1.5, other: it.customUrgencyScore || 2 };
-    const baseWeight = weights[it.type] || 2;
-    const effectiveWeight = baseWeight + (it.manualUrgencyBoost || 0);
-    it.urgency = effectiveWeight * (1 / Math.max(hoursUntil, 1));
-  });
+  // Apply filters to completed items too
+  if (filterCourse) completed = completed.filter(i => i.course === filterCourse);
+  if (filterType) completed = completed.filter(i => i.type === filterType);
 
-  // Group by day
-  const overdue = [];
-  const todayItems = [];
-  const upcoming = {};
+  // Separate overdue
+  const overdue = active.filter(i => { const d = new Date(i.dueDate); d.setHours(0,0,0,0); return d < now; });
+  const upcoming = active.filter(i => { const d = new Date(i.dueDate); d.setHours(0,0,0,0); return d >= now && d <= endDate; });
 
-  activeItems.forEach(it => {
-    const due = new Date(it.dueDate);
-    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-
-    if (dueDay < today) {
-      overdue.push(it);
-    } else if (dueDay.getTime() === today.getTime()) {
-      todayItems.push(it);
-    } else if (dueDay <= endDate) {
-      const key = dueDay.toISOString().substring(0, 10);
-      if (!upcoming[key]) upcoming[key] = [];
-      upcoming[key].push(it);
-    }
-  });
-
-  // Sort by pinned first, then urgency
+  // Sort
+  overdue.forEach(i => i.urgency = calcUrgency(i));
+  upcoming.forEach(i => i.urgency = calcUrgency(i));
   const sortFn = (a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
     return b.urgency - a.urgency;
   };
   overdue.sort(sortFn);
-  todayItems.sort(sortFn);
+
+  // Group upcoming by day
+  const dayGroups = {};
+  upcoming.forEach(i => {
+    const d = i.dueDate.substring(0, 10);
+    if (!dayGroups[d]) dayGroups[d] = [];
+    dayGroups[d].push(i);
+  });
+  Object.values(dayGroups).forEach(g => g.sort(sortFn));
 
   let html = '';
+  if (overdue.length === 0 && upcoming.length === 0 && completed.length === 0) {
+    html = '<div class="empty-state"><p>📭 No items yet</p><p>Upload a PDF or add items manually</p></div>';
+    container.innerHTML = html;
+    return;
+  }
 
-  // Overdue
+  // Overdue section
   if (overdue.length > 0) {
-    html += '<div class="day-group"><div class="day-header" style="color:var(--danger)">🔴 Overdue</div>';
-    overdue.forEach(it => html += renderItem(it));
+    html += '<div class="day-group"><div class="day-header" style="color:var(--danger);">🔴 Overdue</div>';
+    overdue.forEach(i => html += renderItem(i));
     html += '</div>';
   }
 
-  // Today
-  html += '<div class="day-group"><div class="day-header" style="color:#f97316">🟠 Today</div>';
-  if (todayItems.length > 0) {
-    todayItems.forEach(it => html += renderItem(it));
-  } else {
-    html += '<div class="empty-state">Nothing due today 🎉</div>';
-  }
-  html += '</div>';
-
-  // Upcoming days
-  const sortedDays = Object.keys(upcoming).sort();
+  // Upcoming by day
+  const sortedDays = Object.keys(dayGroups).sort();
   sortedDays.forEach(day => {
-    const dayItems = upcoming[day].sort(sortFn);
     const d = new Date(day + 'T12:00:00');
-    const dayName = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    const diff = Math.round((new Date(day) - today) / (1000*60*60*24));
-    let color = '';
-    if (diff === 1) color = 'color:var(--warning)';
-    else if (diff <= 4) color = 'color:var(--primary)';
-
-    html += `<div class="day-group"><div class="day-header" style="${color}">${dayName}</div>`;
-    dayItems.forEach(it => html += renderItem(it));
+    const today = new Date(); today.setHours(0,0,0,0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+    let label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    if (d.getTime() === today.getTime()) label = '🟠 Today — ' + label;
+    else if (d.getTime() === tomorrow.getTime()) label = '🟡 Tomorrow — ' + label;
+    html += `<div class="day-group"><div class="day-header">${label}</div>`;
+    dayGroups[day].forEach(i => html += renderItem(i));
     html += '</div>';
   });
 
   // Completed section
-  if (completedItems.length > 0) {
+  if (completed.length > 0) {
+    completed.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
     html += `<div class="completed-section">
       <div class="completed-toggle" onclick="toggleCompleted()">
         <span class="arrow ${completedOpen ? 'open' : ''}" id="completedArrow">▶</span>
-        ✅ Completed (${completedItems.length})
+        ✅ Completed (${completed.length})
       </div>
-      <div class="completed-items ${completedOpen ? 'open' : ''}" id="completedContainer">`;
-    completedItems.sort((a,b) => new Date(b.dueDate) - new Date(a.dueDate));
-    completedItems.forEach(it => html += renderItem(it));
+      <div class="completed-items ${completedOpen ? 'open' : ''}" id="completedItems">`;
+    completed.forEach(i => html += renderItem(i));
     html += '</div></div>';
-  }
-
-  if (activeItems.length === 0 && completedItems.length === 0) {
-    html = '<div class="empty-state">No items yet. Upload a PDF or add items manually.</div>';
   }
 
   container.innerHTML = html;
@@ -584,63 +499,46 @@ function renderDashboard() {
 function toggleCompleted() {
   completedOpen = !completedOpen;
   const arrow = document.getElementById('completedArrow');
-  const container = document.getElementById('completedContainer');
+  const items = document.getElementById('completedItems');
   if (arrow) arrow.classList.toggle('open', completedOpen);
-  if (container) container.classList.toggle('open', completedOpen);
+  if (items) items.classList.toggle('open', completedOpen);
 }
 
 function renderItem(item) {
   const due = new Date(item.dueDate);
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const diff = Math.round((dueDay - today) / (1000*60*60*24));
-
-  let cls = 'todo-item';
-  if (item.completed) cls += ' completed';
-  else if (diff < 0) cls += ' overdue';
-  else if (diff === 0) cls += ' due-today';
-  else if (diff === 1) cls += ' due-tomorrow';
-  else if (diff <= 4) cls += ' due-soon';
+  const hrs = (due - now) / 3600000;
+  let cls = '';
+  if (item.completed) cls = 'completed';
+  else if (hrs < 0) cls = 'overdue';
+  else if (hrs < 24) cls = 'due-today';
+  else if (hrs < 48) cls = 'due-tomorrow';
+  else if (hrs < 96) cls = 'due-soon';
   if (item.pinned) cls += ' pinned';
-
-  const typeIcons = { reading: '📖', assignment: '📄', exam: '❓', other: '🔧' };
+  const typeLabels = { reading: '📖', assignment: '📄', exam: '❓', other: '🔧' };
   const typeBadges = { reading: 'badge-reading', assignment: 'badge-assignment', exam: 'badge-exam', other: 'badge-other' };
-  const icon = typeIcons[item.type] || '📋';
-  const badge = typeBadges[item.type] || 'badge-other';
-  const boost = item.manualUrgencyBoost > 0 ? ' ' + '🔥'.repeat(Math.min(item.manualUrgencyBoost, 3)) : '';
-  const pin = item.pinned ? ' 📌' : '';
+  const boostIcons = '🔥'.repeat(Math.min(item.manualUrgencyBoost || 0, 3));
   const dateStr = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-  return `<div class="${cls}">
+  return `<div class="todo-item ${cls}">
     <input type="checkbox" class="todo-checkbox" ${item.completed?'checked':''} onchange="toggleComplete('${item.id}')" />
     <div class="todo-body">
-      <div class="todo-title">${icon} ${escHtml(item.title)}${boost}${pin}</div>
-      <div class="todo-meta">
-        <span class="badge ${badge}">${item.type}</span>
-        ${item.course ? ' · ' + escHtml(item.course) : ''} · ${dateStr}
-      </div>
+      <div class="todo-title">${item.pinned?'📌 ':''}${typeLabels[item.type]||'🔧'} ${item.title} ${boostIcons}</div>
+      <div class="todo-meta"><span class="badge ${typeBadges[item.type]||'badge-other'}">${item.type}</span> · ${dateStr} · ${item.course||'No course'}</div>
     </div>
     <div class="todo-actions">
-      <button onclick="togglePin('${item.id}')" title="Pin">📌</button>
-      <button onclick="boostItem('${item.id}',1)" title="Boost">⬆</button>
-      <button onclick="boostItem('${item.id}',-1)" title="Reduce">⬇</button>
+      <button onclick="togglePin('${item.id}')" title="Pin">${item.pinned?'📌':'📍'}</button>
+      <button onclick="boostItem('${item.id}')" title="Boost">⬆</button>
       <button onclick="editItem('${item.id}')" title="Edit">✏️</button>
       <button onclick="deleteItem('${item.id}')" title="Delete">🗑️</button>
     </div>
   </div>`;
 }
 
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-// ===== ITEM ACTIONS =====
-function toggleComplete(id) { const it = todoItems.find(i=>i.id===id); if(it){ it.completed=!it.completed; saveItems(); renderDashboard(); } }
-function togglePin(id) { const it = todoItems.find(i=>i.id===id); if(it){ it.pinned=!it.pinned; saveItems(); renderDashboard(); } }
-function boostItem(id, delta) {
-  const it = todoItems.find(i=>i.id===id);
-  if(it){ it.manualUrgencyBoost = Math.max(0, Math.min(3, (it.manualUrgencyBoost||0) + delta)); saveItems(); renderDashboard(); }
-}
-function deleteItem(id) { if(confirm('Delete this item?')){ todoItems = todoItems.filter(i=>i.id!==id); saveItems(); renderDashboard(); } }
+// ==================== ITEM ACTIONS ====================
+function toggleComplete(id) { const i = todoItems.find(x=>x.id===id); if(i){i.completed=!i.completed;saveItems();renderDashboard();} }
+function togglePin(id) { const i = todoItems.find(x=>x.id===id); if(i){i.pinned=!i.pinned;saveItems();renderDashboard();} }
+function boostItem(id) { const i = todoItems.find(x=>x.id===id); if(i){i.manualUrgencyBoost=Math.min((i.manualUrgencyBoost||0)+1,3);saveItems();renderDashboard();} }
+function deleteItem(id) { if(confirm('Delete this item?')){todoItems=todoItems.filter(x=>x.id!==id);saveItems();renderDashboard();} }
 
 function clearAllItems() {
   if (!confirm('Are you sure you want to clear ALL items from the dashboard?')) return;
@@ -650,97 +548,147 @@ function clearAllItems() {
   renderDashboard();
 }
 
-// ===== EDIT MODAL =====
-function editItem(id) {
-  const it = todoItems.find(i=>i.id===id);
-  if(!it) return;
-  editingId = id;
-  document.getElementById('modalTitle').textContent = 'Edit Item';
-  document.getElementById('editTitle').value = it.title;
-  document.getElementById('editType').value = it.type;
-  document.getElementById('editDueDate').value = it.dueDate.substring(0,10);
-  document.getElementById('editCourse').value = it.course || '';
-  document.getElementById('editRecurrence').value = it.recurrence || '';
-  document.getElementById('urgencyGroup').style.display = it.type==='other' ? 'block' : 'none';
-  if (it.customUrgencyScore) document.getElementById('editUrgency').value = it.customUrgencyScore;
-  document.getElementById('editModal').classList.add('active');
-}
-
+// ==================== MODAL ====================
 function addItemModal() {
   editingId = null;
   document.getElementById('modalTitle').textContent = 'Add Item';
-  document.getElementById('editTitle').value = '';
-  document.getElementById('editType').value = 'other';
-  document.getElementById('editDueDate').value = new Date().toISOString().substring(0,10);
-  document.getElementById('editCourse').value = '';
-  document.getElementById('editRecurrence').value = '';
-  document.getElementById('urgencyGroup').style.display = 'block';
-  document.getElementById('editModal').classList.add('active');
+  document.getElementById('modalItemTitle').value = '';
+  document.getElementById('modalItemCourse').value = '';
+  document.getElementById('modalItemType').value = 'reading';
+  document.getElementById('modalItemDate').value = '';
+  document.getElementById('modalUrgency').value = 3;
+  document.getElementById('urgencyVal').textContent = '3.0';
+  document.getElementById('modalRecurrence').value = '';
+  document.getElementById('recurrenceEndGroup').style.display = 'none';
+  document.getElementById('urgencySliderGroup').style.display = 'none';
+  document.getElementById('modalOverlay').classList.add('active');
 }
 
-document.getElementById('editType').addEventListener('change', function() {
-  document.getElementById('urgencyGroup').style.display = this.value === 'other' ? 'block' : 'none';
+function editItem(id) {
+  const item = todoItems.find(x => x.id === id);
+  if (!item) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Item';
+  document.getElementById('modalItemTitle').value = item.title;
+  document.getElementById('modalItemCourse').value = item.course || '';
+  document.getElementById('modalItemType').value = item.type;
+  document.getElementById('modalItemDate').value = (item.dueDate||'').substring(0,10);
+  document.getElementById('modalUrgency').value = item.customUrgencyScore || 3;
+  document.getElementById('urgencyVal').textContent = item.customUrgencyScore || '3.0';
+  document.getElementById('modalRecurrence').value = item.recurrence ? item.recurrence.pattern : '';
+  document.getElementById('urgencySliderGroup').style.display = item.type === 'other' ? 'block' : 'none';
+  document.getElementById('recurrenceEndGroup').style.display = item.recurrence ? 'block' : 'none';
+  if (item.recurrence && item.recurrence.endDate) document.getElementById('modalRecurrenceEnd').value = item.recurrence.endDate;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+document.getElementById('modalItemType').addEventListener('change', function() {
+  document.getElementById('urgencySliderGroup').style.display = this.value === 'other' ? 'block' : 'none';
+});
+document.getElementById('modalRecurrence').addEventListener('change', function() {
+  document.getElementById('recurrenceEndGroup').style.display = this.value ? 'block' : 'none';
 });
 
-function saveEdit() {
-  const title = document.getElementById('editTitle').value.trim();
-  const type = document.getElementById('editType').value;
-  const dueDate = document.getElementById('editDueDate').value;
-  const course = document.getElementById('editCourse').value.trim();
-  const recurrence = document.getElementById('editRecurrence').value;
-  const urgency = parseFloat(document.getElementById('editUrgency').value);
+function saveModalItem() {
+  const title = document.getElementById('modalItemTitle').value.trim();
+  const course = document.getElementById('modalItemCourse').value.trim();
+  const type = document.getElementById('modalItemType').value;
+  const date = document.getElementById('modalItemDate').value;
+  const urgency = parseFloat(document.getElementById('modalUrgency').value);
+  const recurrencePattern = document.getElementById('modalRecurrence').value;
+  const recurrenceEnd = document.getElementById('modalRecurrenceEnd').value;
+  if (!title || !date) { alert('Title and date are required'); return; }
 
-  if (!title || !dueDate) { alert('Title and due date are required.'); return; }
+  const recurrence = recurrencePattern ? { pattern: recurrencePattern, endDate: recurrenceEnd || null } : null;
 
   if (editingId) {
-    const it = todoItems.find(i => i.id === editingId);
-    if (it) {
-      it.title = title; it.type = type; it.dueDate = dueDate + 'T23:59:00'; it.course = course; it.recurrence = recurrence;
-      if (type === 'other') it.customUrgencyScore = urgency;
+    const item = todoItems.find(x => x.id === editingId);
+    if (item) {
+      item.title = title; item.course = course; item.type = type;
+      item.dueDate = date + 'T23:59:00';
+      item.customUrgencyScore = type === 'other' ? urgency : null;
+      item.recurrence = recurrence;
     }
   } else {
-    const item = {
-      id: crypto.randomUUID(), course: course, type: type, title: title,
-      dueDate: dueDate + 'T23:59:00', completed: false, pinned: false,
-      manualUrgencyBoost: 0, customUrgencyScore: type === 'other' ? urgency : null,
-      recurrence: recurrence, urgency: 0
+    const newItem = {
+      id: crypto.randomUUID(), course, type, title, description: '',
+      dueDate: date + 'T23:59:00', completed: false, isUserAdded: true,
+      pinned: false, manualUrgencyBoost: 0,
+      customUrgencyScore: type === 'other' ? urgency : null,
+      recurrence, urgency: 0
     };
-    if (recurrence) { generateRecurring(item); } else { todoItems.push(item); }
+    todoItems.push(newItem);
+    // Generate recurring instances
+    if (recurrence && recurrence.pattern) {
+      generateRecurring(newItem);
+    }
   }
   saveItems();
   closeModal();
   renderDashboard();
 }
 
-function closeModal() { document.getElementById('editModal').classList.remove('active'); editingId = null; }
+function generateRecurring(item) {
+  if (!item.recurrence) return;
+  const pattern = item.recurrence.pattern;
+  const endDate = item.recurrence.endDate ? new Date(item.recurrence.endDate) : null;
+  const startDate = new Date(item.dueDate);
+  let intervals = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 };
+  let step = intervals[pattern] || 7;
+  let current = new Date(startDate);
+  let count = 0;
+  const maxCount = 52;
+  while (count < maxCount) {
+    current.setDate(current.getDate() + step);
+    if (endDate && current > endDate) break;
+    if (!endDate && count > 12) break;
+    count++;
+    const titleNum = item.title.includes('{n}') ? item.title.replace('{n}', count + 1) : `${item.title} #${count + 1}`;
+    todoItems.push({
+      id: crypto.randomUUID(), course: item.course, type: item.type,
+      title: titleNum, description: '', dueDate: current.toISOString().substring(0,10) + 'T23:59:00',
+      completed: false, isUserAdded: true, pinned: false, manualUrgencyBoost: 0,
+      customUrgencyScore: item.customUrgencyScore, recurrence: null, urgency: 0,
+      recurrenceGroupId: item.id
+    });
+  }
+}
 
-// ===== PERSISTENCE =====
-function saveItems() { localStorage.setItem('todoItems', JSON.stringify(todoItems)); }
-
-// ===== EXPORT / IMPORT =====
+// ==================== EXPORT / IMPORT ====================
 function exportJSON() {
   const blob = new Blob([JSON.stringify(todoItems, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = 'todo_backup_' + new Date().toISOString().substring(0,10) + '.json';
+  a.download = 'todo_backup_' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
 }
+
 document.getElementById('importFile').addEventListener('change', async function(e) {
-  const file = e.target.files[0]; if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
   try {
     const text = await file.text();
-    const imported = JSON.parse(text);
-    if (Array.isArray(imported)) {
-      todoItems = [...todoItems, ...imported];
+    const data = JSON.parse(text);
+    if (Array.isArray(data)) {
+      const count = data.length;
+      data.forEach(item => {
+        if (!todoItems.find(x => x.id === item.id)) todoItems.push(item);
+      });
       saveItems();
       renderDashboard();
-      switchTab('dashboard');
-      alert(`Imported ${imported.length} items.`);
+      alert(`✅ Imported ${count} items`);
     }
-  } catch(err) { alert('Invalid JSON file.'); }
+  } catch(e) { alert('⚠️ Invalid JSON file'); }
   this.value = '';
 });
 
-// ===== INIT =====
+// ==================== FILTER LISTENERS ====================
+document.getElementById('filterCourse').addEventListener('change', renderDashboard);
+document.getElementById('filterType').addEventListener('change', renderDashboard);
+document.getElementById('lookahead').addEventListener('change', renderDashboard);
+
+// ==================== INIT ====================
 renderDashboard();
 </script>
 </body>
